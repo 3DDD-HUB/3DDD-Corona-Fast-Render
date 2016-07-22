@@ -15,19 +15,26 @@ global _rStep1
 rollout _rStep0  "Basic Setup"
 (
 	button btnSetupScene "Setup Scene" height: 35 width: 230
-	button btnStartInteractive "Start Interactive"
-	
+		
 	group "Light"
 	(		
-		slider sldLightHDR "0°" ticks: 36 range:[0,360,0]
-		button btnLightHDR "Light HDR"
+		spinner spnLightHDR "" across: 2 align: #left range: [0, 360, 0] type: #integer scale: 1.0 
+		label lblDegree "°" align: #left offset: [-44, 0]
+		label lblStart "0°" align: #left across: 2
+		label lblStop "360°" align: #right
+		slider sldLightHDR "" ticks: 36 range:[0,360,0] type: #integer
+		button btnLightHDR "None"
 	)
 	
 	group "Reflections"
 	(
 		checkbox cbxUseReflect "Use Reflect HDR"
-		slider sldReflectHDR "0°" ticks: 36 range:[0,360,0]
-		button btnReflectHDR "Reflect HDR"
+		spinner spnReflectHDR "" across: 2 align: #left range: [0, 360, 0] type: #integer scale: 1.0 
+		label lblDegree2 "°" align: #left offset: [-44, 0]
+		label lblStart2 "0°" align: #left across: 2
+		label lblStop2 "360°" align: #right
+		slider sldReflectHDR "" ticks: 36 range:[0,360,0] type: #integer
+		button btnReflectHDR "None"
 	)
 	
 	fn useSettings k p w =
@@ -105,7 +112,7 @@ rollout _rStep0  "Basic Setup"
 	(
 		r = renderers.current
 
-		if matchpattern (r as string) pattern:"*Corona*" do return r
+		if(classOf r == CoronaRenderer) do return r
 		return undefined
 	)
 	
@@ -132,16 +139,74 @@ rollout _rStep0  "Basic Setup"
 	)
 	
 	fn angeToOffset a = 1.0 / (360.0 / a) 
+	fn offsetToAngle o = 360.0 * o
 	fn getAngle a = ((a as integer) as string) + "°"
+	
+	fn setOffset b o =
+	(
+		case classOf b of
+		(
+			CoronaBitmap: b.uvwOffset = [o, 0, 0]
+			bitmapTex: b.coords.U_Offset = o
+		)
+	)
+	
+	fn getOffset h =
+	(
+		case classOf h of
+		(
+			CoronaBitmap: return h.uvwOffset[1]
+			bitmapTex: return h.coords.U_Offset
+			default: return 0.0
+		)
+	)		
+	
+	fn getHDR h =
+	(
+		case classOf h of
+		(
+			CoronaBitmap: return h
+			bitmapTex: return h
+			colorCorrection: return h.map
+			default: return undefined
+		)	
+	)
 	
 	fn rotateHDR b a = 
 	(
 		if(b == undefined) do return false
 		o = angeToOffset a
-		b.uvwOffset = [o, 0, 0]
+			
+		h = getHDR b
+		if(h != undefined) do setOffset h o				
 	)
+		
+	fn loadHDR = 
+	(
+		if(corona.bg_source != 1) do return false
+			
+		h = getHDR corona.bg_texmap
+		if(h != undefined) do 
+		(
+			btnLightHDR.caption = filenameFromPath h.filename
+			
+			o = getOffset h
+			spnLightHDR.value = offsetToAngle o
+			sldLightHDR.value = offsetToAngle o
+		)
 	
-	fn startInteractive = CoronaRenderer.CoronaFp.startInteractive()
+		h = getHDR	 corona.bg_texmapReflect
+		if(h != undefined) do 
+		(
+			btnReflectHDR.caption = filenameFromPath h.filename	
+			
+			o = getOffset h
+			spnReflectHDR.value = offsetToAngle o 
+			sldReflectHDR.value = offsetToAngle o
+		)
+		
+		cbxUseReflect.checked = corona.bg_overrideReflect
+	)
 	
 	fn setHDRI =
 	(
@@ -155,7 +220,7 @@ rollout _rStep0  "Basic Setup"
 		f2 = useSettings "REFLECT_HDR" "str" "r"	
 			
 		lightHDRPath = if(f1 != "")	then f1 else lightHDRPath
-		reflectHDRPath = if(f2 != "") then f1 else reflectHDRPath
+		reflectHDRPath = if(f2 != "") then f2 else reflectHDRPath
 			
 		if(doesFileExist lightHDRPath) do
 		(
@@ -165,30 +230,23 @@ rollout _rStep0  "Basic Setup"
 			lightHDR = CoronaBitmap()
 			lightHDR.filename = lightHDRPath
 			corona.bg_texmap = lightHDR
-			
-			btnLightHDR.caption = filenameFromPath lightHDRPath
-
-		
+				
 			a = useSettings "LIGHT_HDR_ANGLE" "float" "r"						
-			rotateHDR (corona.bg_texmapReflect) a				
-			sldLightHDR.caption = getAngle a 
-			sldLightHDR.value = a
+			rotateHDR (corona.bg_texmapReflect) a						
 		)
 		
 		if(doesFileExist reflectHDRPath) do
 		(
 			corona.bg_overrideReflect = true			
 			reflectHDR = CoronaBitmap()
-			lightHDR.filename = reflectHDRPath
-			corona.bg_texmapReflect = lightHDR
-				
-			btnReflectHDR.caption = filenameFromPath reflectHDRPath	
-
+			reflectHDR.filename = reflectHDRPath
+			corona.bg_texmapReflect = reflectHDR
+			
 			a = useSettings "REFLECT_HDR_ANGLE" "float" "r"						
-			rotateHDR (corona.bg_texmapReflect) a				
-			sldReflectHDR.caption = getAngle a 
-			sldReflectHDR.value = a
+			rotateHDR (corona.bg_texmapReflect) a					
 		)
+		
+		loadHDR()
 	)
 	
 	fn useReflect =
@@ -197,7 +255,7 @@ rollout _rStep0  "Basic Setup"
 		cbxUseReflect.checked = r
 		corona.bg_overrideReflect = r
 	)
-	
+		
 	on btnLightHDR pressed do
 	(
 		f = getOpenFileName  caption: "Select Light HDR" types: "*.hdr|*.hdr|*.exr|*.exr"
@@ -226,14 +284,17 @@ rollout _rStep0  "Basic Setup"
 	)
 	
 	on _rStep0	open do
-	(
-		disableUI false
-		
-		corona = isCorona()		
+	(			
+		corona = isCorona()	
+		if(corona == undefined) do 
+		(
+			closeRolloutFloater fFastRender
+			return messageBox "Please assign Corona Renderer" title: "Warning!"
+		)
+
+		loadHDR()
 	)
-	
-	on btnStartInteractive pressed do startInteractive()
-	
+		
 	on btnSetupScene pressed do
 	(
 		
@@ -247,9 +308,7 @@ rollout _rStep0  "Basic Setup"
 		setHDRI()
 		
 		useReflect()
-		
-		disableUI true btn: false
-		
+				
 		addVFB_Elements()
 				
 		corona.denoise_filterType = 2
@@ -262,28 +321,45 @@ rollout _rStep0  "Basic Setup"
 	)
 	
 	on sldLightHDR changed a do
-	(
-		rotateHDR (corona.bg_texmap) a
-				
-		sldLightHDR.caption = getAngle a 
+	(					
+		spnLightHDR.value = a 
 		
+		rotateHDR (corona.bg_texmap) a
 		useSettings "LIGHT_HDR_ANGLE" a "w"
 	)
 	
 	on sldReflectHDR changed a do
-	(
-		rotateHDR (corona.bg_texmapReflect) a
-				
-		sldReflectHDR.caption = getAngle a 
+	(					
+		spnReflectHDR.value = a 
 		
+		
+		rotateHDR (corona.bg_texmapReflect) a
 		useSettings "REFLECT_HDR_ANGLE" a "w"
+	)
+	
+	on spnReflectHDR changed a do
+	(
+		sldReflectHDR.value = a
+		
+		rotateHDR (corona.bg_texmapReflect) a
+		useSettings "REFLECT_HDR_ANGLE" a "w"
+	)
+	
+	on spnLightHDR changed a do
+	(
+		sldLightHDR.value = a
+		
+		rotateHDR (corona.bg_texmap) a
+		useSettings "LIGHT_HDR_ANGLE" a "w"
 	)
 )
 
 rollout _rStep1  "Render / PostProcess"
 (	
 	
+	button btnStartInteractive "Start Interactive"
 	button btnStartRender "Start Render" height: 35 width: 230
+	
 	button btnShowFinal "Show Final Result" checked: true
 	
 	fn getVFB c: 0 = 
@@ -300,6 +376,13 @@ rollout _rStep1  "Render / PostProcess"
 		bt.bitmap = b
 			
 		return  bt
+	)
+	
+	fn clearCache =
+	(
+		f = @"c:\temp\fast-preview\"
+		d = getFiles (f + "*")
+		for i in d do deleteFile i
 	)
 	
 	fn showFinal =
@@ -383,6 +466,8 @@ rollout _rStep1  "Render / PostProcess"
 
 		outRender = renderMap outputMap size:[640,640] filter: true scale: 1.0
 		display outRender
+		
+		clearCache()
 				
 		/*rollout rFinalResult  "Post Process" 
 		(
@@ -412,17 +497,13 @@ rollout _rStep1  "Render / PostProcess"
 	global isRendering = true
 	fn stopRender = CoronaRenderer.CoronaFp.stopRender()
 	fn startRender = CoronaRenderer.CoronaFp.resumeRender()
+	fn startInteractive = CoronaRenderer.CoronaFp.startInteractive()
 	
-	on btnStartRender pressed do
-	(
-		startRender()		
-	)
+	on btnStartRender pressed do startRender()	
 	
-	on btnShowFinal pressed do
-	(
-		showFinal()
-	)
+	on btnStartInteractive pressed do startInteractive()
 	
+	on btnShowFinal pressed do showFinal()
 )
 
 rollout _rAbout "About" 
