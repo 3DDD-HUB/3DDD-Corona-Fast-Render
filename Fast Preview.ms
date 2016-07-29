@@ -316,8 +316,6 @@ rollout _rStep0  "Basic Setup"
 		
 		corona.colorMap_simpleExposure = 1.0
 		corona.colorMap_highlightCompression = 2.0
-		
-		startInteractive()
 	)
 	
 	on sldLightHDR changed a do
