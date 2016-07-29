@@ -1,7 +1,7 @@
 
 
 try(closeRolloutFloater fFastRender) catch()
-global fFastRender = newRolloutFloater "3DDD Fast Preview (Corona)" 250 550
+global fFastRender = newRolloutFloater "Fast Preview" 250 880
 
 global szVer = "1.0.0"
 global lightHDR = undefined
@@ -11,6 +11,7 @@ global outputMap = compositeTextureMap()
 
 global _rStep0
 global _rStep1
+global _rStep2
 
 rollout _rStep0  "Basic Setup"
 (
@@ -18,8 +19,8 @@ rollout _rStep0  "Basic Setup"
 		
 	group "Light"
 	(		
-		spinner spnLightHDR "" across: 2 align: #left range: [0, 360, 0] type: #integer scale: 1.0 
-		label lblDegree "°" align: #left offset: [-44, 0]
+		spinner spnLightHDR "Angle:" across: 2 align: #left range: [0, 360, 0] type:#integer scale: 1.0 
+		spinner spnLightHDR_Mult "Mult.:" align: #right range: [0.0, 9999.0, 1.0]  type:#float scale: 0.1  
 		label lblStart "0°" align: #left across: 2
 		label lblStop "360°" align: #right
 		slider sldLightHDR "" ticks: 36 range:[0,360,0] type: #integer
@@ -29,8 +30,8 @@ rollout _rStep0  "Basic Setup"
 	group "Reflections"
 	(
 		checkbox cbxUseReflect "Use Reflect HDR"
-		spinner spnReflectHDR "" across: 2 align: #left range: [0, 360, 0] type: #integer scale: 1.0 
-		label lblDegree2 "°" align: #left offset: [-44, 0]
+		spinner spnReflectHDR "Angle:" across: 2 align: #left range: [0, 360, 0] type: #integer scale: 1.0 		
+		spinner spnReflectHDR_Mult "Mult.:"align: #right range: [0.0, 9999.0, 1.0]  type:#float scale: 0.1  
 		label lblStart2 "0°" align: #left across: 2
 		label lblStop2 "360°" align: #right
 		slider sldReflectHDR "" ticks: 36 range:[0,360,0] type: #integer
@@ -101,11 +102,9 @@ rollout _rStep0  "Basic Setup"
 		
 	-------------------------------------------------
 	
-	fn disableUI d btn: true =
+	fn disableUI d =
 	(
-		for i in _rStep0.controls do i.enabled = d
-				
-		_rStep0.btnSetupScene.enabled = btn
+		for i in _rStep0.controls do i.enabled = d					
 	)
 	
 	fn isCorona = 
@@ -172,6 +171,34 @@ rollout _rStep0  "Basic Setup"
 		)	
 	)
 	
+	fn setMult h i =
+	(			
+		if(i == "") do i = 1.0
+		
+		i = i as float
+		
+		h = getHDR h
+		if(h == undefined) do return false
+		
+		case classOf h of
+		(
+			CoronaBitmap:  h.output.output_amount = i
+			bitmapTex:  h.output.output_amount = i
+		)
+	)
+	
+	fn getMult h =
+	(
+		h = getHDR h
+		
+		case classOf h of
+		(
+			CoronaBitmap:  return h.output.output_amount
+			bitmapTex:  return h.output.output_amount
+			default: return 1.0
+		)	
+	)
+	
 	fn rotateHDR b a = 
 	(
 		if(b == undefined) do return false
@@ -193,6 +220,8 @@ rollout _rStep0  "Basic Setup"
 			o = getOffset h
 			spnLightHDR.value = offsetToAngle o
 			sldLightHDR.value = offsetToAngle o
+			
+			spnLightHDR_Mult.value = getMult h
 		)
 	
 		h = getHDR	 corona.bg_texmapReflect
@@ -203,6 +232,8 @@ rollout _rStep0  "Basic Setup"
 			o = getOffset h
 			spnReflectHDR.value = offsetToAngle o 
 			sldReflectHDR.value = offsetToAngle o
+			
+			spnReflectHDR_Mult.value = getMult h
 		)
 		
 		cbxUseReflect.checked = corona.bg_overrideReflect
@@ -232,7 +263,10 @@ rollout _rStep0  "Basic Setup"
 			corona.bg_texmap = lightHDR
 				
 			a = useSettings "LIGHT_HDR_ANGLE" "float" "r"						
-			rotateHDR (corona.bg_texmapReflect) a						
+			rotateHDR (corona.bg_texmap) a
+
+			a = useSettings "LIGHT_HDR_MULT" "string" "r"	
+			setMult corona.bg_texmap a
 		)
 		
 		if(doesFileExist reflectHDRPath) do
@@ -243,7 +277,10 @@ rollout _rStep0  "Basic Setup"
 			corona.bg_texmapReflect = reflectHDR
 			
 			a = useSettings "REFLECT_HDR_ANGLE" "float" "r"						
-			rotateHDR (corona.bg_texmapReflect) a					
+			rotateHDR (corona.bg_texmapReflect) a	
+
+			a = useSettings "REFLECT_HDR_MULT" "string" "r"	
+			setMult corona.bg_texmapReflect a			
 		)
 		
 		loadHDR()
@@ -301,9 +338,6 @@ rollout _rStep0  "Basic Setup"
 		if(corona == undefined) do return messageBox "Please assign Corona Renderer" title: "Warning!"
 				
 		defaultView()
-					
-		renderWidth = 640
-		renderHeight = 640
 				
 		setHDRI()
 		
@@ -350,15 +384,237 @@ rollout _rStep0  "Basic Setup"
 		rotateHDR (corona.bg_texmap) a
 		useSettings "LIGHT_HDR_ANGLE" a "w"
 	)
+	
+	on spnLightHDR_Mult changed v do
+	(
+		setMult corona.bg_texmap v
+		useSettings "LIGHT_HDR_MULT" v "w"
+	)
+	
+	on spnReflectHDR_Mult changed v do
+	(
+		setMult corona.bg_texmapReflect v
+		useSettings "REFLECT_HDR_MULT" v "w"
+	)
 )
 
-rollout _rStep1  "Render / PostProcess"
+
+rollout _rStep1  "Highlights"
+(	
+	listbox lbxLights height: 8
+	button btnAdd "Add Light" across: 2
+	button btnRemove "Remove Light"
+	
+	group "Light Settings"
+	(
+		spinner spnW "W:" range: [0, 99999999, (units.decodeValue "80.0cm")] fieldWidth: 60 type: #worldunits across: 2 align: #left
+		spinner spnH "H:" range: [0, 99999999, (units.decodeValue "50.0cm")] fieldWidth: 60 type: #worldunits  align: #left
+		spinner spnMult "Mult.:" range: [-100, 999999, 1.0] fieldWidth: 40 type: #float align: #left offset: [0, 10] across: 2
+		spinner spnDist "Dist.:" range: [0, 99999999, (units.decodeValue "150.0cm")] fieldWidth: 60 type: #worldunits  align: #left offset: [0, 10] scale: 1.0
+	)
+	
+	button btnPlace "Place Highlight" width: 200 height: 30
+	
+	local callbackLight = undefined
+	global lightsList = #()
+	local trackCallback = #continue
+	
+	fn getCurrentLight =
+	(
+		i = lbxLights.selection
+		if(i == 0) do return undefined
+		
+		l = lightsList[i]
+		if(isValidNode l) do return l
+		--for l in lightsList where isValidNode l and findString l.name n != undefined do return l
+				
+		return undefined
+	)
+	
+	fn disableUI d =
+	(
+		for i in _rStep1.controls do i.enabled = d
+	)
+	
+	fn placeObject objList l =
+	(		
+		placeObj = l
+		
+		fn trackRay ir =	
+		(		
+			if(ir != undefined) then
+			(	
+				view = (inverse(viewport.getTM())).row4
+				viewVector = normalize (view - ir.pos)
+						
+				refVector = normalize (2 * (dot ir.dir viewVector) *  ir.dir - viewVector)
+			
+				placeObj.dir = refVector
+					
+				placeObj.pos = ir.pos 
+				in coordsys local move placeObj [0, 0, spnDist.value]
+				
+				setUserProp placeObj "HiglightDistance" (distance placeObj.pos ir.pos)	
+				
+				return #continue
+			)
+		)
+				
+		fn mouseTrackCallback msg ir obj faceNum shift ctrl alt =
+		(
+			case msg of
+			(				
+				#freeMove:
+				(								
+					return #continue
+				)
+				#mouseAbort:
+				(																																			
+					return #end
+				)
+				#mousePoint:
+				(	
+					trackRay ir					
+					return #end
+				)
+				#mouseMove:
+				(																								
+					trackRay ir
+					return #continue
+				)									
+			)
+		)
+				
+		trackCallback = mouseTrack on:objList trackCallBack: mouseTrackCallback		
+	)
+	
+	fn getLights = return for l in lights where findString l.name "HighLight_" != undefined collect l
+
+	fn getParams = 
+	(
+		l = getCurrentLight()
+		
+		if(l == undefined) do return false
+		
+		spnW.value = l.width
+		spnH.value = l.height
+		spnMult.value = l.intensity
+		d = getUserProp l "HiglightDistance" 
+		if(d != undefined) do spnDist.value = d
+	)
+	
+	fn setParams =
+	(
+		l = getCurrentLight()		
+		if(l == undefined) do return false
+		
+		l.width = spnW.value
+		l.height = spnH.value
+		l.intensity = spnMult.value 
+		
+		d = getUserProp l "HiglightDistance" 
+				
+		v = spnDist.value - d 
+			
+		m = d  + v
+		
+		in coordsys local move l [0, 0, v]
+		setUserProp l "HiglightDistance" m			
+	)
+	
+	fn buildList ev nd =
+	(
+		lightsList = getLights()
+		lbxLights.items = for i in lightsList collect i.name
+			
+		getParams()
+	)
+	
+	fn addLight =
+	(
+		f = getFilenamePath  (getThisScriptFilename ()) + @"hdri\highlight.exr" 
+
+		h = (units.decodeValue "80.0cm")
+		w = (units.decodeValue "50.0cm")
+			
+		l = CoronaLight targeted:off height: h width: w pos:[0, 0, 0] isSelected: off name: (uniqueName "HighLight_") visibleDirectly: off
+		
+		setUserProp l "HiglightDistance" (units.decodeValue "150.0cm")
+			
+		s = lbxLights.items.count
+		if(s > 0) do try(lbxLights.selection = s + 1) catch()
+			
+		if(doesFileExist f) do
+		(
+			l.colorMode = 2
+			l.texmap = CoronaBitmap filename: f
+		)
+	)
+		
+	fn removeLight =
+	(				
+		l = getCurrentLight()
+		
+		if(l != undefined) do delete l
+	)
+	
+	on spnW changed v do setParams()
+	on spnH changed v do setParams()
+	on spnMult changed v do setParams()
+	on spnDist changed v do setParams()
+		
+	on btnAdd pressed do addLight()
+	on btnRemove pressed do removeLight()
+	
+	on _rStep1 open do
+	(
+		buildList undefined undefined
+		
+		callbackLight = NodeEventCallback mouseUp:true delay:1000 deleted:buildList added:buildList nameChanged:buildList
+	)
+	
+	on _rStep1 close do
+	(
+		callbackLight = undefined
+	)
+	
+	on lbxLights selected a do getParams()	
+	
+	on btnPlace pressed do
+	(			
+		placeObj = getCurrentLight()
+		
+		if(placeObj == undefined) do return messageBox "Please add highlight!" title: "Warning!"
+		
+		disableUI false
+		
+		o = for i in geometry where i.isHidden == false and placeObj != i  collect i
+		--while trackCallback != #end do placeObject o placeObj
+		placeObject o placeObj
+		
+		trackCallback = #continue
+		
+		disableUI true
+	)
+)
+
+rollout _rStep2  "Render / PostProcess"
 (	
 	
-	button btnStartInteractive "Start Interactive"
-	button btnStartRender "Start Render" height: 35 width: 230
-	
-	button btnShowFinal "Show Final Result" checked: true
+	group "Render Setup"
+	(
+		spinner spnRenderSize "Render Size:" range: [640, 99999, 640] type: #integer fieldWidth: 40 align: #left across: 2
+		label lblPx " px" align: #left offset: [10, 0]
+	)
+	group "Render"
+	(
+		button btnStartInteractive "Start Interactive"
+		button btnStartRender "Start Render" height: 30 width: 200
+	)
+	group "Post Process"
+	(
+		button btnShowFinal "Show Final Result" 
+	)
 	
 	fn getVFB c: 0 = 
 	(	
@@ -493,22 +749,51 @@ rollout _rStep1  "Render / PostProcess"
 	)
 	
 	global isRendering = true
+	
+	fn setupRender =
+	(
+		renderWidth = spnRenderSize.value
+		renderHeight = spnRenderSize.value		
+	)
+	
 	fn stopRender = CoronaRenderer.CoronaFp.stopRender()
-	fn startRender = CoronaRenderer.CoronaFp.resumeRender()
-	fn startInteractive = CoronaRenderer.CoronaFp.startInteractive()
+	fn startRender = 
+	(
+		setupRender()		
+		CoronaRenderer.CoronaFp.resumeRender()
+	)
+	
+	
+	fn startInteractive =
+	(
+		setupRender()
+		CoronaRenderer.CoronaFp.startInteractive()
+	)
 	
 	on btnStartRender pressed do startRender()	
 	
 	on btnStartInteractive pressed do startInteractive()
 	
 	on btnShowFinal pressed do showFinal()
+	
+	on _rStep1 open do
+	(
+		s = _rStep0.useSettings "RENDER_SIZE" "int" "r"
+		
+		spnRenderSize.value = s
+	)
+	
+	on spnRenderSize changed v do
+	(
+		_rStep0.useSettings "RENDER_SIZE" v "w"
+	)
 )
 
 rollout _rAbout "About" 
 (
 	local c = color 200 200 200 
 	
-	label lbl2 "3DDD Fast Preview (Corona)" 
+	label lbl2 "Fast Preview" 
 	label lbl3 szVer 
 	
 	label lbl5 "by MastaMan" 
@@ -519,7 +804,8 @@ rollout _rAbout "About"
 )
 
 addRollout _rStep0 fFastRender rolledUp:false
-addRollout _rStep1 fFastRender rolledUp:false
+addRollout _rStep1 fFastRender rolledUp:true
+addRollout _rStep2 fFastRender rolledUp:false
 addRollout _rAbout fFastRender rolledUp:true 
 /*
 
