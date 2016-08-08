@@ -1,5 +1,4 @@
 
-
 try(closeRolloutFloater fFastRender) catch()
 global fFastRender = newRolloutFloater "Fast Preview" 250 880
 
@@ -12,6 +11,34 @@ global outputMap = compositeTextureMap()
 global _rStep0
 global _rStep1
 global _rStep2
+
+global 	blendOptions = #(
+		"Normal",
+		"Average",
+		"Addition",
+		"Subtract",
+		"Darken",
+		"Multiply",
+		"Color Burn",
+		"Linear Burn",
+		"Lighten",
+		"Screen",
+		"Color Dodge",
+		"Linear Dodge",
+		"Spotlight",
+		"Spotlight Blend",
+		"Overlay",
+		"Soft Light",
+		"Hard Light",
+		"Pin Light",
+		"Hard Mix",
+		"Difference",
+		"Exclusion",
+		"Hue",
+		"Saturation",
+		"Color",
+		"Value"
+	 ) 
 
 rollout _rStep0  "Basic Setup"
 (
@@ -36,6 +63,17 @@ rollout _rStep0  "Basic Setup"
 		label lblStop2 "360°" align: #right
 		slider sldReflectHDR "" ticks: 36 range:[0,360,0] type: #integer
 		button btnReflectHDR "None"
+	)
+	
+	fn enableReflections =
+	(
+		c = cbxUseReflect.checked
+		spnReflectHDR.enabled = c
+		spnReflectHDR_Mult.enabled = c
+		lblStart2.enabled = c
+		lblStop2.enabled = c
+		sldReflectHDR.enabled = c
+		btnReflectHDR.enabled = c
 	)
 	
 	fn useSettings k p w =
@@ -318,6 +356,7 @@ rollout _rStep0  "Basic Setup"
 		useSettings "REFLECT_HDR_ON" s "w"
 		
 		useReflect()
+		enableReflections()
 	)
 	
 	on _rStep0	open do
@@ -329,6 +368,7 @@ rollout _rStep0  "Basic Setup"
 			return messageBox "Please assign Corona Renderer" title: "Warning!"
 		)
 
+		enableReflections()
 		loadHDR()
 	)
 		
@@ -436,30 +476,30 @@ rollout _rStep1  "Highlights"
 		for i in _rStep1.controls do i.enabled = d
 	)
 	
+	fn trackRay ir placeObj =	
+	(		
+		if(ir != undefined) then
+		(	
+			view = (inverse(viewport.getTM())).row4
+			viewVector = normalize (view - ir.pos)
+					
+			refVector = normalize (2 * (dot ir.dir viewVector) *  ir.dir - viewVector)
+		
+			placeObj.dir = refVector
+				
+			placeObj.pos = ir.pos 
+			in coordsys local move placeObj [0, 0, spnDist.value]
+			
+			setUserProp placeObj "HiglightDistance" (distance placeObj.pos ir.pos)	
+			
+			return #continue
+		)
+	)
+	
 	fn placeObject objList l =
 	(		
-		placeObj = l
-		
-		fn trackRay ir =	
-		(		
-			if(ir != undefined) then
-			(	
-				view = (inverse(viewport.getTM())).row4
-				viewVector = normalize (view - ir.pos)
+		global placeObj = l
 						
-				refVector = normalize (2 * (dot ir.dir viewVector) *  ir.dir - viewVector)
-			
-				placeObj.dir = refVector
-					
-				placeObj.pos = ir.pos 
-				in coordsys local move placeObj [0, 0, spnDist.value]
-				
-				setUserProp placeObj "HiglightDistance" (distance placeObj.pos ir.pos)	
-				
-				return #continue
-			)
-		)
-				
 		fn mouseTrackCallback msg ir obj faceNum shift ctrl alt =
 		(
 			case msg of
@@ -474,12 +514,12 @@ rollout _rStep1  "Highlights"
 				)
 				#mousePoint:
 				(	
-					trackRay ir					
+					trackRay ir placeObj					
 					return #end
 				)
 				#mouseMove:
 				(																								
-					trackRay ir
+					trackRay ir placeObj
 					return #continue
 				)									
 			)
@@ -537,7 +577,7 @@ rollout _rStep1  "Highlights"
 		h = (units.decodeValue "80.0cm")
 		w = (units.decodeValue "50.0cm")
 			
-		l = CoronaLight targeted:off height: h width: w pos:[0, 0, 0] isSelected: off name: (uniqueName "HighLight_") visibleDirectly: off
+		l = CoronaLight targeted:off height: h width: w pos:[0, 0, 0] isSelected: off name: (uniqueName "HighLight_") visibleDirectly: off shape: 1
 		
 		setUserProp l "HiglightDistance" (units.decodeValue "150.0cm")
 			
@@ -598,6 +638,102 @@ rollout _rStep1  "Highlights"
 	)
 )
 
+fn postProcess =
+(
+	global rPostProcess
+	
+	try(destroyDialog rPostProcess) catch()
+		
+	rollout rPostProcess "Post Process"
+	(
+		button btnImage "Wait while pre-rendering..." enabled: false border: false width: 640 height: 640 pos: [0, 0]
+	
+		subrollout subRollout1 "Settings"
+		
+		fn preRender = renderMap outputMap size:[640,640] filter: true scale: 1.0
+				
+		fn showRender = 
+		(			
+			r = preRender()
+			
+			if(r == undefined) do r = bitmap 1 1 color: black 
+			
+			b = bitmap 640 640 color: black 
+			btnImage.images = #(r, b, 1,1,1,1,1)
+		)
+		
+		fn clearRender = 
+		(
+			r = bitmap 1 1 color: black 
+			btnImage.images = #(r, r, 1,1,1,1,1)
+		)
+		
+		fn saveImage =
+		(
+			f = getSaveFileName types: "*.jpg|*.jpg|*.png|*.png"
+			if(f == undefined) do return false
+			
+			r = preRender()
+			
+			r.filename = f
+			save r
+			close r
+		)
+		
+		on rPostProcess open do
+		(			
+			showRender()
+		)
+	)
+	
+	createDialog rPostProcess (640 + 250) 640
+
+	
+	ex = "rollout rPostSettings \"Settings\"\n "
+	ex += "(\n"
+	
+	
+	for i in 1 to outputMap.mapList.count do 
+	(	
+		n = outputMap.mapList[i].name
+		b = outputMap.blendMode[i]
+		o = outputMap.opacity[i] as string 
+		s = i as string
+		
+		ex += "group \"" + n + "\" \n"
+		ex += "(\n"
+		ex += "checkbox cbx" + s + " \"\" across: 3 checked: true\n"
+		ex += 	"dropdownlist ddl" + s+ "\"\" width: 150 offset: [-50, 0] items: blendOptions selection: " + (b + 1) as string + "\n"
+		ex += "spinner spn" + s + "\"\" range: [0, 100, " + o + "] type: #integer"
+		ex += ")\n"
+		ex += "on ddl" + s+ " selected v do (\n"
+		ex += "outputMap.blendMode[" + s +"] = v - 1\n"
+		ex += "rPostProcess.showRender()\n"
+		ex += ")\n"	
+		ex += "on spn" + s + " changed v do (\n"
+		ex += "outputMap.opacity[" + s + "] = v \n"
+		ex += "rPostProcess.showRender()\n"
+		ex += ")\n"
+		ex += "on cbx" + s + " changed  v do (\n"
+		ex += "if(v == false) then outputMap.opacity[" + s + "] = 0 else outputMap.opacity[" + s + "] = spn" + s + ".value \n"
+		ex += "rPostProcess.showRender()\n"
+		ex += ") \n"
+	)
+	
+	ex += "button btnSave \"Save Image\" offset: [0, 15]\n"
+	ex += " on btnSave pressed do rPostProcess.saveImage()"
+	ex += ")\n"
+	
+	
+	execute(ex)
+	
+	rPostProcess.subRollout1.pos = [640, 0]
+	rPostProcess.subRollout1.width = 250
+	rPostProcess.subRollout1.height = rPostProcess.height
+	
+	AddSubRollout rPostProcess.subRollout1 rPostSettings		
+)
+
 rollout _rStep2  "Render / PostProcess"
 (	
 	
@@ -639,25 +775,29 @@ rollout _rStep2  "Render / PostProcess"
 		for i in d do deleteFile i
 	)
 	
-	fn showFinal =
+	fn setupPostProcess =
 	(
-		a = getVFB c:1
+		clearCache()
+		
+		vfbAlpha = getVFB c:1
 		main = getVFB c:0
 
 		-- Beauty / None
 		--outputMap = compositeTextureMap()
 		outputMap.mapList[1] = main
+		outputMap.mapList[1].name = "Beauty"
 
 		-- Direct Light / SoftLight
-		l = 2
+		l = 2		
 		outputMap.mapList[l] = getVFB c: l
 		outputMap.mapList[l].coords.blur = 0.01
 		outputMap.blendMode[l] = 15
 		outputMap.opacity[l] = 15
-		outputMap.mask[l] = a
+		outputMap.mask[l] = vfbAlpha
+		outputMap.mapList[l].name = "Direct Light"
 
 		-- Reflect / Screen
-		l = 3
+		l = 3		
 		outputMap.mapList[l] = ColorCorrection()
 		outputMap.mapList[l].map = getVFB c: l			
 		outputMap.mapList[l].map.coords.blur = 0.01
@@ -665,31 +805,36 @@ rollout _rStep2  "Render / PostProcess"
 		outputMap.mapList[l].liftRGB = -0.35			
 		outputMap.blendMode[l] = 9
 		outputMap.opacity[l] = 100
-		outputMap.mask[l] = a
+		outputMap.mask[l] = vfbAlpha
+		outputMap.mapList[l].name = "Reflect"
 
 		-- Refract / Screen
-		l = 4
+		l = 4		
 		outputMap.mapList[l] = getVFB c: l
 		outputMap.mapList[l].coords.blur = 0.01
 		outputMap.blendMode[l] = 9
 		outputMap.opacity[l] = 50
-		outputMap.mask[l] = a
+		outputMap.mask[l] = vfbAlpha
+		outputMap.mapList[l].name = "Refract"
 		
 		-- Albedo / Overlay
-		l = 5
+		l = 5		
 		outputMap.mapList[l] = getVFB c: l
 		outputMap.mapList[l].coords.blur = 0.01
 		outputMap.blendMode[l] = 14
 		outputMap.opacity[l] = 25
-		outputMap.mask[l] = a
+		outputMap.mask[l] = vfbAlpha
+		outputMap.mapList[l].name = "Albedo"
 
 		-- AO / Multiply
-		l = 6
+		l = 6		
 		outputMap.mapList[l] = getVFB c: l
 		outputMap.mapList[l].coords.blur = 0.01
 		outputMap.blendMode[l] = 5
 		outputMap.opacity[l] = 25
-		outputMap.mask[l] = a
+		outputMap.mask[l] = vfbAlpha
+		outputMap.mapList[l].name = "AO"
+		
 		/*
 		-- CA / Lighten
 		l = 7
@@ -718,11 +863,9 @@ rollout _rStep2  "Render / PostProcess"
 		outputMap.opacity[l] = 40
 		*/
 
-		outRender = renderMap outputMap size:[640,640] filter: true scale: 1.0
-		display outRender
-		
-		clearCache()
-				
+		--outRender = renderMap outputMap size:[640,640] filter: true scale: 1.0
+		--display outRender
+						
 		/*rollout rFinalResult  "Post Process" 
 		(
 			bitmap btmOutRender width: 640 height: 640 offset: [0, 35]
@@ -774,12 +917,17 @@ rollout _rStep2  "Render / PostProcess"
 	
 	on btnStartInteractive pressed do startInteractive()
 	
-	on btnShowFinal pressed do showFinal()
+	on btnShowFinal pressed do 
+	(	
+		setupPostProcess()
+		
+		postProcess()
+	)
 	
-	on _rStep1 open do
+	on _rStep2 open do
 	(
 		s = _rStep0.useSettings "RENDER_SIZE" "int" "r"
-		
+
 		spnRenderSize.value = s
 	)
 	
