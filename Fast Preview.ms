@@ -65,6 +65,9 @@ rollout _rStep0  "Basic Setup"
 		button btnReflectHDR "None"
 	)
 	
+	timer tmrRotateLightHDR "" active: false interval: 100
+	timer tmrRotateReflectHDR "" active: false interval: 100
+	
 	fn enableReflections =
 	(
 		c = cbxUseReflect.checked
@@ -131,7 +134,7 @@ rollout _rStep0  "Basic Setup"
 		cm.texmap = CoronaAO()	
 		cm.overrideBackground = true
 		cm.overrideBackgroundColor = white
-		cm.texmap.maxDistance = (units.decodeValue "15.0cm")
+		cm.texmap.maxDistance = (units.decodeValue "8.0cm")
 				
 		append renderElements cm
 		
@@ -367,9 +370,9 @@ rollout _rStep0  "Basic Setup"
 			closeRolloutFloater fFastRender
 			return messageBox "Please assign Corona Renderer" title: "Warning!"
 		)
-
-		enableReflections()
+		
 		loadHDR()
+		enableReflections()
 	)
 		
 	on btnSetupScene pressed do
@@ -393,36 +396,67 @@ rollout _rStep0  "Basic Setup"
 	)
 	
 	on sldLightHDR changed a do
-	(					
-		spnLightHDR.value = a 
+	(							
+		spnLightHDR.value = a 				
+		
+		tmrRotateLightHDR.active = false
+		tmrRotateLightHDR.active = true
+	)
+	
+	on tmrRotateLightHDR tick do
+	(
+		a = spnLightHDR.value 
 		
 		rotateHDR (corona.bg_texmap) a
 		useSettings "LIGHT_HDR_ANGLE" a "w"
+		
+		tmrRotateLightHDR.active = false
+	)
+	
+	on tmrRotateReflectHDR tick do
+	(
+		a = spnReflectHDR.value
+		
+		rotateHDR (corona.bg_texmapReflect) a
+		useSettings "REFLECT_HDR_ANGLE" a "w"
+		
+		tmrRotateReflectHDR.active = false
 	)
 	
 	on sldReflectHDR changed a do
 	(					
 		spnReflectHDR.value = a 
-		
-		
-		rotateHDR (corona.bg_texmapReflect) a
-		useSettings "REFLECT_HDR_ANGLE" a "w"
+				
+		tmrRotateReflectHDR.active = false
+		tmrRotateReflectHDR.active = true
+	)
+	
+	on sldReflectHDR buttondown do
+	(
+		tmrRotateReflectHDR.active = false
+		tmrRotateReflectHDR.active = true
+	)
+	
+	on sldLightHDR buttondown do
+	(
+		tmrRotateLightHDR.active = false
+		tmrRotateLightHDR.active = true
 	)
 	
 	on spnReflectHDR changed a do
 	(
 		sldReflectHDR.value = a
 		
-		rotateHDR (corona.bg_texmapReflect) a
-		useSettings "REFLECT_HDR_ANGLE" a "w"
+		tmrRotateReflectHDR.active = false
+		tmrRotateReflectHDR.active = true
 	)
 	
 	on spnLightHDR changed a do
 	(
 		sldLightHDR.value = a
 		
-		rotateHDR (corona.bg_texmap) a
-		useSettings "LIGHT_HDR_ANGLE" a "w"
+		tmrRotateLightHDR.active = false
+		tmrRotateLightHDR.active = true
 	)
 	
 	on spnLightHDR_Mult changed v do
@@ -455,6 +489,8 @@ rollout _rStep1  "Highlights"
 	
 	button btnPlace "Place Highlight" width: 200 height: 30
 	
+	timer tmrInteractive active: false 
+		
 	local callbackLight = undefined
 	global lightsList = #()
 	local trackCallback = #continue
@@ -474,6 +510,7 @@ rollout _rStep1  "Highlights"
 	fn disableUI d =
 	(
 		for i in _rStep1.controls do i.enabled = d
+		btnPlace.enabled = true
 	)
 	
 	fn trackRay ir placeObj =	
@@ -499,23 +536,24 @@ rollout _rStep1  "Highlights"
 	fn placeObject objList l =
 	(		
 		global placeObj = l
-						
+				
 		fn mouseTrackCallback msg ir obj faceNum shift ctrl alt =
 		(
 			case msg of
 			(				
 				#freeMove:
-				(								
+				(						
 					return #continue
 				)
 				#mouseAbort:
-				(																																			
+				(
 					return #end
 				)
 				#mousePoint:
 				(	
-					trackRay ir placeObj					
-					return #end
+					trackRay ir placeObj		
+					tmrInteractive.active = true						
+					return #continue
 				)
 				#mouseMove:
 				(																								
@@ -598,6 +636,13 @@ rollout _rStep1  "Highlights"
 		if(l != undefined) do delete l
 	)
 	
+	on tmrInteractive tick do 
+	(			
+		CoronaRenderer.CoronaFp.startInteractive()
+		
+		tmrInteractive.active = false
+	)
+	
 	on spnW changed v do setParams()
 	on spnH changed v do setParams()
 	on spnMult changed v do setParams()
@@ -619,6 +664,7 @@ rollout _rStep1  "Highlights"
 	)
 	
 	on lbxLights selected a do getParams()	
+
 	
 	on btnPlace pressed do
 	(			
@@ -627,13 +673,13 @@ rollout _rStep1  "Highlights"
 		if(placeObj == undefined) do return messageBox "Please add highlight!" title: "Warning!"
 		
 		disableUI false
-		
+				
 		o = for i in geometry where i.isHidden == false and placeObj != i  collect i
-		--while trackCallback != #end do placeObject o placeObj
+		--while trackCallback != #stop do placeObject o placeObj
 		placeObject o placeObj
-		
+				
 		trackCallback = #continue
-		
+				
 		disableUI true
 	)
 )
@@ -643,24 +689,18 @@ fn postProcess =
 	global rPostProcess
 	
 	try(destroyDialog rPostProcess) catch()
-		
+	
+	global postRender = undefined
+	
 	rollout rPostProcess "Post Process"
 	(
 		button btnImage "Wait while pre-rendering..." enabled: false border: false width: 640 height: 640 pos: [0, 0]
 	
 		subrollout subRollout1 "Settings"
 		
-		fn preRender = renderMap outputMap size:[640,640] filter: true scale: 1.0
+		timer tmrShowRender "" active: false
 				
-		fn showRender = 
-		(			
-			r = preRender()
-			
-			if(r == undefined) do r = bitmap 1 1 color: black 
-			
-			b = bitmap 640 640 color: black 
-			btnImage.images = #(r, b, 1,1,1,1,1)
-		)
+		fn preRender = renderMap outputMap size:[640,640] filter: true scale: 1.0
 		
 		fn clearRender = 
 		(
@@ -668,9 +708,21 @@ fn postProcess =
 			btnImage.images = #(r, r, 1,1,1,1,1)
 		)
 		
+		fn showRender now: false = 
+		(	
+			if(now != true ) do clearRender()
+			
+			postRender = preRender()
+			
+			tmrShowRender.interval = 500
+			if(now == true ) do tmrShowRender.interval = 1
+			
+			tmrShowRender.active = true
+		)
+				
 		fn saveImage =
 		(
-			f = getSaveFileName types: "*.jpg|*.jpg|*.png|*.png"
+			f = getSaveFileName types: "JPG|*.jpg|PNG|*.png"
 			if(f == undefined) do return false
 			
 			r = preRender()
@@ -681,8 +733,23 @@ fn postProcess =
 		)
 		
 		on rPostProcess open do
-		(			
+		(				
 			showRender()
+		)
+		
+		on tmrShowRender tick do
+		(
+			if(postRender == undefined) do r = bitmap 1 1 color: black 
+			
+			b = bitmap 640 640 color: black 
+			btnImage.images = #(postRender, b, 1,1,1,1,1)
+			
+			tmrShowRender.active = false
+		)
+		
+		on rPostProcess close do
+		(
+			try(destroyDialog rPostProcess) catch()
 		)
 	)
 	
@@ -691,7 +758,58 @@ fn postProcess =
 	
 	ex = "rollout rPostSettings \"Settings\"\n "
 	ex += "(\n"
+	ex += "checkbox cbxShowAll \"Hide/Show Effects\" checked: true\n\n"
 	
+		
+	for i in 1 to outputMap.mapList.count do 
+	(	
+		n = outputMap.mapList[i].name
+		b = outputMap.blendMode[i]
+		o = outputMap.opacity[i] as string 
+		s = i as string
+		en = if(i == 1) then "false" else "true"
+		/* -- Save Settings
+		
+			blendMode = _rStep0.useSettings ("BLENDMODE" + s) "string" "r"
+			if(blendMode != "") do b = blendMode as integer - 1
+			
+			opacityMode = _rStep0.useSettings ("OPACITY" + s) "string" "r"
+			if(opacityMode != "") do o = opacityMode
+			
+			enableMode = _rStep0.useSettings ("EFFECT" + s) "string" "r"
+			if(enableMode == "") do enableMode = "true"
+			
+			outputMap.blendMode[i] = b
+			outputMap.opacity[i] = o as integer
+		*/
+		
+		enableMode = "true"
+		
+		ex += "group \"" + n + "\" \n"
+		ex += "(\n"
+		ex += "checkbox cbx" + s + " \"\" width: 24 across: 3 checked: " + enableMode + "  enabled: " + en + " \n"
+		ex += 	"dropdownlist ddl" + s+ "\"\" width: 140 enabled: " + en + " offset: [-45, 0] items: blendOptions selection: " + (b + 1) as string + "\n"
+		ex += "spinner spn" + s + "\"\" range: [0, 100, " + o + "] type: #integer enabled: " + en + " \n"
+		ex += ")\n"
+		ex += "on ddl" + s+ " selected v do (\n"
+		ex += 	"outputMap.blendMode[" + s +"] = v - 1\n"
+		ex += 	"rPostProcess.showRender now: true\n"
+		ex += 	"_rStep0.useSettings \"BLENDMODE" + s + "\" v \"w\" \n"
+		ex += ")\n"	
+		ex += "on spn" + s + " changed v do (\n"
+		ex += 	"outputMap.opacity[" + s + "] = v \n"
+		ex += 	"rPostProcess.showRender now: true\n"
+		ex += 	"_rStep0.useSettings \"OPACITY" + s + "\" v \"w\" \n"		
+		ex += ")\n"
+		ex += "on cbx" + s + " changed  v do (\n"
+		ex += 	"if(v == false) then outputMap.opacity[" + s + "] = 0 else outputMap.opacity[" + s + "] = spn" + s + ".value \n"
+		ex += 	"rPostProcess.showRender now: true\n"
+		ex += 	"_rStep0.useSettings \"EFFECT" + s + "\" v \"w\" \n"
+		ex += ") \n"
+	)
+	
+	ex += "on cbxShowAll changed s do \n"
+	ex += "(\n"
 	
 	for i in 1 to outputMap.mapList.count do 
 	(	
@@ -700,30 +818,19 @@ fn postProcess =
 		o = outputMap.opacity[i] as string 
 		s = i as string
 		
-		ex += "group \"" + n + "\" \n"
-		ex += "(\n"
-		ex += "checkbox cbx" + s + " \"\" across: 3 checked: true\n"
-		ex += 	"dropdownlist ddl" + s+ "\"\" width: 150 offset: [-50, 0] items: blendOptions selection: " + (b + 1) as string + "\n"
-		ex += "spinner spn" + s + "\"\" range: [0, 100, " + o + "] type: #integer"
-		ex += ")\n"
-		ex += "on ddl" + s+ " selected v do (\n"
-		ex += "outputMap.blendMode[" + s +"] = v - 1\n"
-		ex += "rPostProcess.showRender()\n"
-		ex += ")\n"	
-		ex += "on spn" + s + " changed v do (\n"
-		ex += "outputMap.opacity[" + s + "] = v \n"
-		ex += "rPostProcess.showRender()\n"
-		ex += ")\n"
-		ex += "on cbx" + s + " changed  v do (\n"
-		ex += "if(v == false) then outputMap.opacity[" + s + "] = 0 else outputMap.opacity[" + s + "] = spn" + s + ".value \n"
-		ex += "rPostProcess.showRender()\n"
-		ex += ") \n"
+		if(i != 1) do 
+		(
+			ex += "if(s == false) then outputMap.opacity[" + s + "] = 0 else outputMap.opacity[" + s + "] = spn" + s + ".value \n"
+			ex += "cbx" + s + ".checked = s \n"			
+		)
 	)
+
+	ex += "rPostProcess.showRender now: true\n"
+	ex += ")\n"
 	
 	ex += "button btnSave \"Save Image\" offset: [0, 15]\n"
 	ex += " on btnSave pressed do rPostProcess.saveImage()"
 	ex += ")\n"
-	
 	
 	execute(ex)
 	
@@ -758,7 +865,10 @@ rollout _rStep2  "Render / PostProcess"
 		makeDir f
 			
 		b = CoronaRenderer.CoronaFp.getVfbContent c true true
-		b.filename = f + c as string  + ".jpg"
+			
+		t = timeStamp()
+		b.filename = f + t as string  + ".jpg"
+		
 		save b
 		close b
 		
@@ -779,13 +889,19 @@ rollout _rStep2  "Render / PostProcess"
 	(
 		clearCache()
 		
+		_rStep0.addVFB_Elements()
+		
+		
 		vfbAlpha = getVFB c:1
 		main = getVFB c:0
 
 		-- Beauty / None
 		--outputMap = compositeTextureMap()
-		outputMap.mapList[1] = main
-		outputMap.mapList[1].name = "Beauty"
+		l = 1
+		outputMap.mapList[l] = main
+		outputMap.mapList[l].coords.blur = 0.01
+		outputMap.mapList[l].name = "Beauty"
+		
 
 		-- Direct Light / SoftLight
 		l = 2		
@@ -801,10 +917,10 @@ rollout _rStep2  "Render / PostProcess"
 		outputMap.mapList[l] = ColorCorrection()
 		outputMap.mapList[l].map = getVFB c: l			
 		outputMap.mapList[l].map.coords.blur = 0.01
-		outputMap.mapList[l].lightnessMode = 1
-		outputMap.mapList[l].liftRGB = -0.35			
+		--outputMap.mapList[l].lightnessMode = 1
+		--outputMap.mapList[l].liftRGB = -0.35			
 		outputMap.blendMode[l] = 9
-		outputMap.opacity[l] = 100
+		outputMap.opacity[l] = 45
 		outputMap.mask[l] = vfbAlpha
 		outputMap.mapList[l].name = "Reflect"
 
@@ -895,8 +1011,15 @@ rollout _rStep2  "Render / PostProcess"
 	
 	fn setupRender =
 	(
+		renderSceneDialog.close()
+		
+		_rStep0.addVFB_Elements()
+		
 		renderWidth = spnRenderSize.value
-		renderHeight = spnRenderSize.value		
+		renderHeight = spnRenderSize.value	
+		
+		renderSceneDialog.commit()
+		renderSceneDialog.update()
 	)
 	
 	fn stopRender = CoronaRenderer.CoronaFp.stopRender()
@@ -918,10 +1041,9 @@ rollout _rStep2  "Render / PostProcess"
 	on btnStartInteractive pressed do startInteractive()
 	
 	on btnShowFinal pressed do 
-	(	
-		setupPostProcess()
-		
-		postProcess()
+	(			
+		try(setupPostProcess()) catch()		
+		try(postProcess()) catch(messageBox "Please press \"Setup Scene\" for add default render elements!" title: "Warning!")
 	)
 	
 	on _rStep2 open do
@@ -929,6 +1051,8 @@ rollout _rStep2  "Render / PostProcess"
 		s = _rStep0.useSettings "RENDER_SIZE" "int" "r"
 
 		spnRenderSize.value = s
+		
+		setupRender()
 	)
 	
 	on spnRenderSize changed v do
@@ -944,7 +1068,7 @@ rollout _rAbout "About"
 	label lbl2 "Fast Preview" 
 	label lbl3 szVer 
 	
-	label lbl5 "by MastaMan" 
+	hyperLink href3 "MastaMan" address: "http://3ddd.ru/users/mastaman" align: #center hoverColor: c visitedColor: c
 	label lbl6 "" 
 		
 	hyperLink href2 "Script Home" address: "http://3ddd.ru/forum/thread/show/skript_prepare_model_3ddd/" align: #center hoverColor: c visitedColor: c
