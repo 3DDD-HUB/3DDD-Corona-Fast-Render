@@ -1025,14 +1025,14 @@ rollout _rStep2  "Render / PostProcess"
 	fn stopRender = CoronaRenderer.CoronaFp.stopRender()
 	fn startRender = 
 	(
-		setupRender()		
+		--setupRender()		
 		CoronaRenderer.CoronaFp.resumeRender()
 	)
 	
 	
 	fn startInteractive =
 	(
-		setupRender()
+		--setupRender()
 		CoronaRenderer.CoronaFp.startInteractive()
 	)
 	
@@ -1050,7 +1050,7 @@ rollout _rStep2  "Render / PostProcess"
 	(
 		s = _rStep0.useSettings "RENDER_SIZE" "int" "r"
 
-		spnRenderSize.value = s
+		if(s != 0) do spnRenderSize.value = s
 		
 		setupRender()
 	)
