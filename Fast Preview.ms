@@ -687,6 +687,7 @@ rollout _rStep1  "Highlights"
 fn postProcess =
 (
 	global rPostProcess
+	global rPostSettings
 	
 	try(destroyDialog rPostProcess) catch()
 	
@@ -761,7 +762,7 @@ fn postProcess =
 	ex += "checkbox cbxShowAll \"Hide/Show Effects\" checked: true\n\n"
 	
 		
-	for i in 1 to outputMap.mapList.count do 
+	for i in 1 to outputMap.mapList.count  where outputMap.mapList[i] != undefined do 
 	(	
 		n = outputMap.mapList[i].name
 		b = outputMap.blendMode[i]
@@ -811,7 +812,7 @@ fn postProcess =
 	ex += "on cbxShowAll changed s do \n"
 	ex += "(\n"
 	
-	for i in 1 to outputMap.mapList.count do 
+	for i in 1 to outputMap.mapList.count  where outputMap.mapList[i] != undefined  do 
 	(	
 		n = outputMap.mapList[i].name
 		b = outputMap.blendMode[i]
@@ -1043,7 +1044,8 @@ rollout _rStep2  "Render / PostProcess"
 	on btnShowFinal pressed do 
 	(			
 		try(setupPostProcess()) catch()		
-		try(postProcess()) catch(messageBox "Please press \"Setup Scene\" for add default render elements!" title: "Warning!")
+		--try(postProcess()) catch(messageBox "Please press \"Setup Scene\" for add default render elements!" title: "Warning!")
+		postProcess()
 	)
 	
 	on _rStep2 open do
